@@ -9,7 +9,7 @@ TEAMS_FILE = "teams.json"
 
 # --- Login ---
 USERNAME = "admin"
-PASSWORD = "1234"  # Change this to your own password
+PASSWORD = "1987"  # change to your own password
 
 # --- Load / Save Functions ---
 def load_json(filename, default):
@@ -23,30 +23,33 @@ def save_json(filename, data):
         json.dump(data, f)
 
 # --- Load Data ---
-scoreboard = load_json(SAVE_FILE, {
-    "Nord 2025 Season": {
-        "Senior D1 Nord": [],
-        "Sophomore D1 Nord": [],
-        "Sophomore D2 Nord": []
-    }
-})
+scoreboard = load_json(SAVE_FILE, {})
 news_feed = load_json(NEWS_FILE, [])
-teams = load_json(TEAMS_FILE, {
-    "Senior D1 Nord": [],
-    "Sophomore D1 Nord": [],
-    "Sophomore D2 Nord": []
-})
+teams = load_json(TEAMS_FILE, {})
+
+# --- Ensure default season/divisions exist ---
+DEFAULT_DIVISIONS = ["Senior D1 Nord", "Sophomore D1 Nord", "Sophomore D2 Nord"]
+DEFAULT_SEASON = "Nord 2025 Season"
+
+if DEFAULT_SEASON not in scoreboard:
+    scoreboard[DEFAULT_SEASON] = {div: [] for div in DEFAULT_DIVISIONS}
+
+for season_name in scoreboard.keys():
+    for div in DEFAULT_DIVISIONS:
+        if div not in scoreboard[season_name]:
+            scoreboard[season_name][div] = []
+        if div not in teams:
+            teams[div] = []
 
 # --- App Title ---
 st.title("🏈 Scorekeeper App")
 
 # --- Select Season & Division ---
-# Default season = Nord 2025 Season
 season_list = list(scoreboard.keys())
-if "Nord 2025 Season" not in season_list:
-    season_list.insert(0, "Nord 2025 Season")
+if DEFAULT_SEASON not in season_list:
+    season_list.insert(0, DEFAULT_SEASON)
 
-selected_season = st.selectbox("Season", season_list, index=season_list.index("Nord 2025 Season"))
+selected_season = st.selectbox("Season", season_list, index=season_list.index(DEFAULT_SEASON))
 division = st.selectbox("Division", list(scoreboard[selected_season].keys()))
 
 # --- Public View: Scoreboard ---
@@ -58,7 +61,7 @@ if games:
 else:
     st.write("No games yet.")
 
-# --- Rankings (Wins, then Points Differential) ---
+# --- Rankings (Wins then Points Differential) ---
 st.header("🏆 Rankings")
 standings = {}
 for game in games:
@@ -135,11 +138,7 @@ if st.session_state.logged_in:
     new_season = st.text_input("New Season Name (e.g. 2026 Season)")
     if st.button("Add Season"):
         if new_season.strip() and new_season.strip() not in scoreboard:
-            scoreboard[new_season.strip()] = {
-                "Senior D1 Nord": [],
-                "Sophomore D1 Nord": [],
-                "Sophomore D2 Nord": []
-            }
+            scoreboard[new_season.strip()] = {div: [] for div in DEFAULT_DIVISIONS}
             save_json(SAVE_FILE, scoreboard)
             st.success(f"Season '{new_season}' created!")
         elif new_season.strip() in scoreboard:
