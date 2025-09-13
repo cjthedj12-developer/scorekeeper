@@ -9,7 +9,7 @@ TEAMS_FILE = "teams.json"
 
 # --- Login ---
 USERNAME = "admin"
-PASSWORD = "2013"  # Change this to your own password
+PASSWORD = "1234"  # Change this to your own password
 
 # --- Load / Save Functions ---
 def load_json(filename, default):
@@ -24,7 +24,7 @@ def save_json(filename, data):
 
 # --- Load Data ---
 scoreboard = load_json(SAVE_FILE, {
-    "2025 Season": {
+    "Nord 2025 Season": {
         "Senior D1 Nord": [],
         "Sophomore D1 Nord": [],
         "Sophomore D2 Nord": []
@@ -41,12 +41,17 @@ teams = load_json(TEAMS_FILE, {
 st.title("🏈 Scorekeeper App")
 
 # --- Select Season & Division ---
-season = st.selectbox("Season", list(scoreboard.keys()))
-division = st.selectbox("Division", list(scoreboard[season].keys()))
+# Default season = Nord 2025 Season
+season_list = list(scoreboard.keys())
+if "Nord 2025 Season" not in season_list:
+    season_list.insert(0, "Nord 2025 Season")
+
+selected_season = st.selectbox("Season", season_list, index=season_list.index("Nord 2025 Season"))
+division = st.selectbox("Division", list(scoreboard[selected_season].keys()))
 
 # --- Public View: Scoreboard ---
 st.header("📊 Scoreboard")
-games = scoreboard[season][division]
+games = scoreboard[selected_season][division]
 if games:
     df = pd.DataFrame(games)
     st.dataframe(df)
@@ -125,6 +130,21 @@ if login:
 if st.session_state.logged_in:
     st.sidebar.subheader("Admin Mode")
 
+    # --- Add / Change Season ---
+    st.subheader("➕ Create New Season")
+    new_season = st.text_input("New Season Name (e.g. 2026 Season)")
+    if st.button("Add Season"):
+        if new_season.strip() and new_season.strip() not in scoreboard:
+            scoreboard[new_season.strip()] = {
+                "Senior D1 Nord": [],
+                "Sophomore D1 Nord": [],
+                "Sophomore D2 Nord": []
+            }
+            save_json(SAVE_FILE, scoreboard)
+            st.success(f"Season '{new_season}' created!")
+        elif new_season.strip() in scoreboard:
+            st.warning("Season already exists!")
+
     # --- Add Team ---
     st.subheader("➕ Add a Team")
     new_team = st.text_input("Team Name")
@@ -149,7 +169,7 @@ if st.session_state.logged_in:
     away_score = st.number_input("Away Score", value=0)
 
     if st.button("Add Game Score"):
-        scoreboard[season][division].append({
+        scoreboard[selected_season][division].append({
             "Home": home_team,
             "Away": away_team,
             "HomeScore": home_score,
