@@ -5,94 +5,164 @@ import os
 
 SAVE_FILE = "scoreboard.json"
 NEWS_FILE = "news.json"
+TEAMS_FILE = "teams.json"
 
-# --- Load Data ---
-def load_data():
-    if os.path.exists(SAVE_FILE):
-        with open(SAVE_FILE, "r") as f:
+# --- Login ---
+USERNAME = "admin"
+PASSWORD = "2013"  # Change this to your own password
+
+# --- Load / Save Functions ---
+def load_json(filename, default):
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
             return json.load(f)
-    return {"2025 Spring": {"Division A": [], "Division B": []}}
+    return default
 
-def save_data(data):
-    with open(SAVE_FILE, "w") as f:
+def save_json(filename, data):
+    with open(filename, "w") as f:
         json.dump(data, f)
 
-def load_news():
-    if os.path.exists(NEWS_FILE):
-        with open(NEWS_FILE, "r") as f:
-            return json.load(f)
-    return []
+# --- Load Data ---
+scoreboard = load_json(SAVE_FILE, {
+    "2025 Season": {
+        "Senior D1 Nord": [],
+        "Sophomore D1 Nord": [],
+        "Sophomore D2 Nord": []
+    }
+})
+news_feed = load_json(NEWS_FILE, [])
+teams = load_json(TEAMS_FILE, {
+    "Senior D1 Nord": [],
+    "Sophomore D1 Nord": [],
+    "Sophomore D2 Nord": []
+})
 
-def save_news(news):
-    with open(NEWS_FILE, "w") as f:
-        json.dump(news, f)
-
-# --- App Start ---
+# --- App Title ---
 st.title("🏈 Scorekeeper App")
 
-scoreboard = load_data()
-news_feed = load_news()
-
-# Pick season/division
+# --- Select Season & Division ---
 season = st.selectbox("Season", list(scoreboard.keys()))
 division = st.selectbox("Division", list(scoreboard[season].keys()))
 
-st.subheader("➕ Add a Game")
-home = st.text_input("Home Team")
-away = st.text_input("Away Team")
-home_score = st.number_input("Home Score", value=0)
-away_score = st.number_input("Away Score", value=0)
-
-if st.button("Add Game"):
-    scoreboard[season][division].append({
-        "Home": home, "Away": away,
-        "HomeScore": home_score, "AwayScore": away_score
-    })
-    save_data(scoreboard)
-    st.success("Game added!")
-
-# Show scoreboard
-st.subheader("📊 Scoreboard")
-if scoreboard[season][division]:
-    df = pd.DataFrame(scoreboard[season][division])
+# --- Public View: Scoreboard ---
+st.header("📊 Scoreboard")
+games = scoreboard[season][division]
+if games:
+    df = pd.DataFrame(games)
     st.dataframe(df)
 else:
     st.write("No games yet.")
 
-# Rankings
-st.subheader("🏆 Rankings")
+# --- Rankings (Wins, then Points Differential) ---
+st.header("🏆 Rankings")
 standings = {}
-for game in scoreboard[season][division]:
-    if game["Home"] not in standings:
-        standings[game["Home"]] = {"Wins": 0, "Losses": 0}
-    if game["Away"] not in standings:
-        standings[game["Away"]] = {"Wins": 0, "Losses": 0}
+for game in games:
+    home, away = game["Home"], game["Away"]
+    hs, as_ = game["HomeScore"], game["AwayScore"]
 
-    if game["HomeScore"] > game["AwayScore"]:
-        standings[game["Home"]]["Wins"] += 1
-        standings[game["Away"]]["Losses"] += 1
-    elif game["AwayScore"] > game["HomeScore"]:
-        standings[game["Away"]]["Wins"] += 1
-        standings[game["Home"]]["Losses"] += 1
+    for team in [home, away]:
+        if team not in standings:
+            standings[team] = {"Wins": 0, "Losses": 0, "Points For": 0, "Points Against": 0}
 
-rank_df = pd.DataFrame([
-    {"Team": t, "Wins": s["Wins"], "Losses": s["Losses"]}
-    for t, s in standings.items()
-]).sort_values(by=["Wins", "Losses"], ascending=[False, True])
+    standings[home]["Points For"] += hs
+    standings[home]["Points Against"] += as_
+    standings[away]["Points For"] += as_
+    standings[away]["Points Against"] += hs
 
-if not rank_df.empty:
+    if hs > as_:
+        standings[home]["Wins"] += 1
+        standings[away]["Losses"] += 1
+    elif as_ > hs:
+        standings[away]["Wins"] += 1
+        standings[home]["Losses"] += 1
+
+rank_data = []
+for team, stats in standings.items():
+    diff = stats["Points For"] - stats["Points Against"]
+    rank_data.append({
+        "Team": team,
+        "Wins": stats["Wins"],
+        "Losses": stats["Losses"],
+        "Points For": stats["Points For"],
+        "Points Against": stats["Points Against"],
+        "Diff": diff
+    })
+
+if rank_data:
+    rank_df = pd.DataFrame(rank_data).sort_values(
+        by=["Wins", "Diff"], ascending=[False, False]
+    ).reset_index(drop=True)
+    rank_df.index = rank_df.index + 1
     st.dataframe(rank_df)
 else:
     st.write("No rankings yet.")
 
-# News Feed
-st.subheader("📰 News Feed")
-for item in news_feed[::-1]:
-    st.write(f"- {item}")
+# --- News Feed ---
+st.header("📰 News Feed")
+if news_feed:
+    for item in news_feed[::-1]:
+        st.write(f"- {item}")
+else:
+    st.write("No news yet.")
 
-new_post = st.text_input("Write a news update")
-if st.button("Post News"):
-    if new_post.strip():
-        news_feed.append(new_post.strip())
-        save_news(news_feed)
-        st.success("News posted!")
+# --- Sidebar: Admin Login ---
+st.sidebar.header("🔑 Admin Login")
+username = st.sidebar.text_input("Username")
+password = st.sidebar.text_input("Password", type="password")
+login = st.sidebar.button("Login")
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if login:
+    if username == USERNAME and password == PASSWORD:
+        st.session_state.logged_in = True
+        st.sidebar.success("Logged in!")
+    else:
+        st.sidebar.error("Wrong username or password")
+
+# --- Admin Mode ---
+if st.session_state.logged_in:
+    st.sidebar.subheader("Admin Mode")
+
+    # --- Add Team ---
+    st.subheader("➕ Add a Team")
+    new_team = st.text_input("Team Name")
+    if st.button("Add Team"):
+        if new_team.strip() and new_team.strip() not in teams[division]:
+            teams[division].append(new_team.strip())
+            save_json(TEAMS_FILE, teams)
+            st.success(f"Team '{new_team}' added to {division}!")
+        elif new_team.strip() in teams[division]:
+            st.warning("Team already exists!")
+
+    # --- Add Game ---
+    st.subheader("➕ Add a Game")
+    if teams[division]:
+        home_team = st.selectbox("Home Team", teams[division], key="home")
+        away_team = st.selectbox("Away Team", teams[division], key="away")
+    else:
+        home_team = st.text_input("Home Team")
+        away_team = st.text_input("Away Team")
+
+    home_score = st.number_input("Home Score", value=0)
+    away_score = st.number_input("Away Score", value=0)
+
+    if st.button("Add Game Score"):
+        scoreboard[season][division].append({
+            "Home": home_team,
+            "Away": away_team,
+            "HomeScore": home_score,
+            "AwayScore": away_score
+        })
+        save_json(SAVE_FILE, scoreboard)
+        st.success("Game added!")
+
+    # --- Post News ---
+    st.subheader("📰 Post News")
+    new_post = st.text_input("Write a news update")
+    if st.button("Post News"):
+        if new_post.strip():
+            news_feed.append(new_post.strip())
+            save_json(NEWS_FILE, news_feed)
+            st.success("News posted!")
